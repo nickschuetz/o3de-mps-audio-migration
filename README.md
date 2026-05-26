@@ -36,13 +36,13 @@ For this migration: the agenda-issue route is probably the right fit, since the 
 
 ## The bug, in detail
 
-A community contributor running MultiplayerSample on Fedora 44 / Linux found:
+MultiplayerSample on Linux exhibits the following failure under sustained play (affects anyone running MPS on a Linux build today):
 
 1. The launcher loads `startmenu` and gameplay works (player movement, network sync, NewStarbase rendering, multiplayer round timing).
 2. Sustained play produces hundreds of `[Error] (System) - Failed to get a new instance of an AudioObject from the implementation` log entries.
 3. Eventually both client and server abort. The server times out on packet processing because audio errors slow the main loop.
 
-Reproduced as `make play-mps-host` + `make play-mps-client` in https://github.com/nickschuetz/o3de-rpm.
+A scripted reproduction recipe lives at [github.com/nickschuetz/o3de-rpm](https://github.com/nickschuetz/o3de-rpm) (`make play-mps-host` + `make play-mps-client`) for anyone who wants a turnkey way to trigger it; the underlying problem reproduces on any Linux MPS build.
 
 The root cause is confirmed: MPS needs to migrate to MiniAudio. MiniAudio does not go through the `AudioSystem` / `AudioObject` / ATL pathway at all; it is independent of the legacy stack. That rules out tunable pool-size fixes; the backend isn't full, it's absent.
 
@@ -186,11 +186,13 @@ These are the working documents and stay maintained alongside this README. The R
 - Discord: `#sig-network` in the Open 3D Foundation Discord
 - RFC process: https://github.com/o3de/sig-network/blob/main/rfcs/README.md
 
-**Working repos for this migration** (all under `github.com/nickschuetz`):
+**Working repos for this migration** (forks under `github.com/nickschuetz`):
 - Engine fork: https://github.com/nickschuetz/o3de (PR target: `o3de/o3de:development`) — where the upstream MiniAudio notification-bus PR is developed
 - MPS code fork: https://github.com/nickschuetz/o3de-multiplayersample (PR target: `o3de/o3de-multiplayersample:development`)
 - MPS assets fork: https://github.com/nickschuetz/o3de-multiplayersample-assets (PR target: `o3de/o3de-multiplayersample-assets:development`)
-- Packaging-side test infrastructure that exposes the bug: https://github.com/nickschuetz/o3de-rpm
+
+**Reproduction (auxiliary):**
+- Scripted Linux reproduction recipe (not on the critical path; one way to trigger the bug for verification): https://github.com/nickschuetz/o3de-rpm
 
 **Upstream references:**
 - MiniAudio Gem source: https://github.com/o3de/o3de/tree/development/Gems/MiniAudio

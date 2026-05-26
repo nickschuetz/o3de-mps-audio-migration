@@ -19,11 +19,11 @@ This document is a self-contained hand-off for a contributor picking up this tas
 
 ## Context that motivated this work
 
-A community contributor running MultiplayerSample on Fedora 44 / Linux found:
+MultiplayerSample on Linux exhibits the following failure under sustained play (affects anyone running an MPS Linux build today; surfaced via a Fedora 44 / Linux reproduction but is not Fedora-specific):
 
 1. The launcher loads `startmenu` and gameplay works (player movement, network sync, NewStarbase rendering, multiplayer round timing).
 2. Sustained play produces hundreds of `[Error] (System) - Failed to get a new instance of an AudioObject from the implementation` log entries. Eventually both client and server abort (the server times out on packet processing because audio errors slow the main loop).
-3. Reproduced as `make play-mps-host` + `make play-mps-client` in https://github.com/nickschuetz/o3de-rpm.
+3. A scripted reproduction recipe (`make play-mps-host` + `make play-mps-client`) is available at https://github.com/nickschuetz/o3de-rpm. The underlying problem reproduces on any Linux MPS build.
 
 The root cause is confirmed on the O3DE Discord (`gems-and-features` channel, 2026-05-22): MPS needs to migrate to MiniAudio. MiniAudio does not use the `AudioSystem`, `AudioObject`, or ATL pathway at all; it is independent of the legacy stack. That confirms the bug isn't a tunable pool-size problem (the engine's own error message suggests bumping `s_AudioObjectPoolSize`, but the pool isn't the bottleneck; the backend implementation is missing entirely).
 
@@ -239,25 +239,23 @@ https://www.o3de.org/docs/user-guide/gems/reference/audio/miniaudio/
 
 ## Validation approach
 
-After each migration step, rebuild and run the existing Tier 9 / Tier 11 tests from https://github.com/nickschuetz/o3de-rpm:
+After each migration step, rebuild MPS and check three things:
+
+1. Existing gameplay still works (player movement, network sync, NewStarbase rendering, multiplayer round timing) on both client and server.
+2. `user/log/Game.log` (or your platform's equivalent log path) no longer contains "Failed to get a new instance of an AudioObject" entries during sustained play (roughly 5 minutes of gameplay).
+3. The game has actual audible sound, once assets are in place.
+
+If all three hold, the migration is succeeding.
+
+For contributors using the o3de-rpm test infrastructure (auxiliary tooling, optional), the same checks are available as scripted targets:
 
 ```bash
 cd $HOME/PROJECTS/o3de-rpm
 make test-multiplayer-sample   # full build + bake + launcher smoke; ~3-10 min warm
 make test-tier11-multiplayer   # post-load liveness; should still pass
-```
-
-For audio-specific validation:
-
-```bash
-make play-mps-host
+make play-mps-host             # interactive validation: play, listen, tail Game.log
 make play-mps-client
-# In the client window, play for ~5 minutes and listen for sounds.
-# Open a terminal and tail $HOME/PROJECTS/o3de-multiplayersample/user/log/Game.log
-# Confirm no "Failed to get a new instance of an AudioObject" entries.
 ```
-
-If the existing tests still pass AND the audio errors are gone AND the game has actual audible sound, the migration is succeeding.
 
 ---
 
@@ -288,7 +286,7 @@ Note: every commit on this branch needs DCO sign-off (`git commit -s`). The repo
 
 ## Cross-references
 
-- The packaging-side test infrastructure that exposes this issue: https://github.com/nickschuetz/o3de-rpm (`tests/multiplayersample-build-test.sh` for Tier 9, `tests/post-load-liveness-test.sh` for Tier 11, `Makefile` `play-mps-*` targets for interactive validation).
+- A scripted reproduction recipe for the Linux failure (auxiliary tooling, not on the critical path): https://github.com/nickschuetz/o3de-rpm provides `tests/multiplayersample-build-test.sh` (Tier 9), `tests/post-load-liveness-test.sh` (Tier 11), and `Makefile` `play-mps-*` targets for interactive validation.
 - The packaging-side follow-up record: `FOLLOW_UPS.md` in the same repo, "MPS audio migration research" entry.
 - Recent related upstream work: [o3de/o3de-multiplayersample-assets#177](https://github.com/o3de/o3de-multiplayersample-assets/pull/177) (asset case-sensitivity fix, merged); [o3de/o3de-multiplayersample#499](https://github.com/o3de/o3de-multiplayersample/pull/499) (PopcornFX/WWISE removal, merged); [o3de/o3de-multiplayersample#502](https://github.com/o3de/o3de-multiplayersample/pull/502) (cmake gem-double-load fix, merged).
 - The MiniAudio Gem itself: `o3de/o3de`'s `Gems/MiniAudio/` directory; documentation at https://www.o3de.org/docs/user-guide/gems/reference/audio/miniaudio/.
