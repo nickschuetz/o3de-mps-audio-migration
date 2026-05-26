@@ -186,12 +186,13 @@ These are the working documents and stay maintained alongside this README. The R
 - Discord: `#sig-network` in the Open 3D Foundation Discord
 - RFC process: https://github.com/o3de/sig-network/blob/main/rfcs/README.md
 
-**This migration:**
+**Working repos for this migration** (all under `github.com/nickschuetz`):
+- Engine fork: https://github.com/nickschuetz/o3de (PR target: `o3de/o3de:development`) — where the upstream MiniAudio notification-bus PR is developed
 - MPS code fork: https://github.com/nickschuetz/o3de-multiplayersample (PR target: `o3de/o3de-multiplayersample:development`)
 - MPS assets fork: https://github.com/nickschuetz/o3de-multiplayersample-assets (PR target: `o3de/o3de-multiplayersample-assets:development`)
 - Packaging-side test infrastructure that exposes the bug: https://github.com/nickschuetz/o3de-rpm
 
-**O3DE audio:**
-- O3DE engine source (MiniAudio gem): https://github.com/o3de/o3de/tree/development/Gems/MiniAudio
+**Upstream references:**
+- MiniAudio Gem source: https://github.com/o3de/o3de/tree/development/Gems/MiniAudio
 - MiniAudio Gem docs: https://www.o3de.org/docs/user-guide/gems/reference/audio/miniaudio/
-- `miniaudio` upstream library (0.11.22): https://github.com/mackron/miniaudio
+- `miniaudio` library (0.11.22): https://github.com/mackron/miniaudio
