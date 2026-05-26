@@ -2,21 +2,23 @@
 
 Coordination repo for migrating MultiplayerSample's audio code from O3DE's legacy AzAudio (ATL/Wwise-shaped) APIs to the modern MiniAudio gem.
 
-> **Status:** Research complete, no code changes yet. Three PRs planned across two repos (see [Planned work](#planned-work)). Looking for input from [O3DE SIG-Network](https://github.com/o3de/sig-network) on the architectural points called out below.
+> **Status:** Research complete, no code changes yet. Three PRs planned across two repos (see [Planned work](#planned-work)). Surfacing to [O3DE SIG-Network](https://github.com/o3de/sig-network) (the forum where MPS topics get discussed in the absence of an MPS-owning SIG) for input on the architectural points called out below.
 
 ---
 
 ## TL;DR for SIG-Network
 
-The MultiplayerSample audio bug on Linux is **a networking reliability failure dressed up as an audio bug.** No AzAudio backend implementation is enabled in MPS's gem set on Linux, so every `AudioObject` allocation fails. The error log floods, the main loop slows down, and the server eventually times out on packet processing. Both client and server abort under sustained play.
+MultiplayerSample is an O3DE demo sample that does not currently have a SIG owner. This is a community contribution toward fixing its audio on Linux, where it does not currently work. SIG-Network is the forum where MPS topics get discussed in the absence of an MPS-owning SIG, and the bug's downstream symptoms (described below) put it in your domain.
 
-The fix is to migrate MPS to the MiniAudio gem, which already ships enabled in MPS's `project.json` but is never called from MPS code. This effort is the coordination home for that migration.
+**The bug:** No AzAudio backend implementation is enabled in MPS's Linux gem set, so every `AudioObject` allocation fails and the engine logs an error each time. In the reproduction available (both client and server running in UI mode on one machine), the audio error volume coincided with a main-loop slowdown and a server packet-processing timeout that took down both processes. The dual-UI configuration likely adds resource pressure beyond what the audio errors alone would produce, so the cascade-to-crash chain is one observation rather than a characterized failure mode. The audio backend gap itself reproduces on any Linux MPS build.
+
+**The fix:** Migrate MPS to the MiniAudio gem, which already ships enabled in MPS's `project.json` but is never called from MPS code. This repo is the coordination home for that migration.
 
 Two points where SIG-Network's input would help:
 
-1. **`GameplayEffectsComponent` migration shape.** It currently fires per-effect RPCs that each spawn a one-shot audio prefab on every client. MiniAudio's one-component-per-sound asset model forces a structural reshape, including changes to the autogen properties. We have a proposal below; a sanity check on the RPC-plus-spawn pattern would be valuable.
+1. **`GameplayEffectsComponent` migration shape.** It currently fires per-effect RPCs that each spawn a one-shot audio prefab on every client. MiniAudio's one-component-per-sound asset model requires a structural reshape, including changes to the autogen properties. We have a proposal below and would value a sanity check on the RPC-plus-spawn pattern.
 
-2. **MiniAudio gem upstream gap.** The gem is missing an `OnPlaybackFinished` notification, which `GameplayEffectsComponent` relies on as a **prefab garbage collector**. Without it, every sound effect leaks a spawned prefab plus its `EntitySpawnTicket`. Worth your awareness since spawn-and-despawn lifecycle is your domain. We propose to land the notification bus as a small upstream PR against `o3de/o3de`.
+2. **MiniAudio gem upstream gap.** The gem is missing an `OnPlaybackFinished` notification, which `GameplayEffectsComponent` relies on to clean up the prefab after the sound finishes. Without it, every sound effect leaks a spawned prefab plus its `EntitySpawnTicket`. Spawn-and-despawn lifecycle is networking-adjacent, so this is worth surfacing here. We propose to land the notification bus as an upstream PR against `o3de/o3de`; we have not yet drafted it, so the scope (wraps `ma_sound_set_end_callback`, marshals from the audio thread to TickBus) is an estimate.
 
 ---
 
@@ -36,13 +38,13 @@ For this migration: the agenda-issue route is probably the right fit, since the 
 
 ## The bug, in detail
 
-MultiplayerSample on Linux exhibits the following failure under sustained play (affects anyone running MPS on a Linux build today):
+MultiplayerSample on Linux exhibits the following behavior:
 
 1. The launcher loads `startmenu` and gameplay works (player movement, network sync, NewStarbase rendering, multiplayer round timing).
 2. Sustained play produces hundreds of `[Error] (System) - Failed to get a new instance of an AudioObject from the implementation` log entries.
-3. Eventually both client and server abort. The server times out on packet processing because audio errors slow the main loop.
+3. In the reproduction available (both client and server running in UI mode on one machine), both processes eventually aborted. The server's packet-processing timeout fired; the audio error logging contributed to a main-loop slowdown, and the dual-UI configuration may have added resource pressure beyond that. The audio backend gap reproduces on any Linux MPS build; the cascade-to-abort chain has only been observed in this one configuration.
 
-A scripted reproduction recipe lives at [github.com/nickschuetz/o3de-rpm](https://github.com/nickschuetz/o3de-rpm) (`make play-mps-host` + `make play-mps-client`) for anyone who wants a turnkey way to trigger it; the underlying problem reproduces on any Linux MPS build.
+A scripted reproduction recipe lives at [github.com/nickschuetz/o3de-rpm](https://github.com/nickschuetz/o3de-rpm) (`make play-mps-host` + `make play-mps-client`).
 
 The root cause is confirmed: MPS needs to migrate to MiniAudio. MiniAudio does not go through the `AudioSystem` / `AudioObject` / ATL pathway at all; it is independent of the legacy stack. That rules out tunable pool-size fixes; the backend isn't full, it's absent.
 
@@ -112,7 +114,7 @@ Two components depend on this:
 - **`BackgroundMusicComponent`** uses `ReportTriggerFinished` to advance to the next track in its playlist (BackgroundMusicComponent.cpp:85). Without a finish signal, playlist cannot advance.
 - **`GameplayEffectsComponent`** uses it as the prefab garbage collector (GameplayEffectsComponent.cpp:105). Without a finish signal, every sound effect leaks an entity and a spawn ticket.
 
-Proposed upstream PR: add `MiniAudio::MiniAudioPlaybackNotificationBus::OnPlaybackFinished` that wraps `ma_sound_set_end_callback` and marshals to TickBus. Approximately 30-line patch plus reflection and a small test.
+Proposed upstream PR: add `MiniAudio::MiniAudioPlaybackNotificationBus::OnPlaybackFinished` that wraps `ma_sound_set_end_callback` and marshals from the audio thread to TickBus. Patch scope is an estimate (not yet drafted).
 
 ---
 

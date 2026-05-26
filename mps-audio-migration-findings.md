@@ -101,7 +101,7 @@ The component spawns one-shot audio prefabs and uses the finish callback as the 
    - In the on-activate callback: subscribes to `AudioTriggerNotificationBus` on the spawned entity, stores its spawn ticket in `m_spawnedEffects`, calls `ExecuteTrigger(triggerName)`
 3. `ReportTriggerFinished()` (cpp:105): erases the ticket from `m_spawnedEffects`, which despawns the prefab
 
-Without a finish signal, every sound effect leaks a prefab entity plus its spawn ticket. At MPS's RPC volume this is a fast leak.
+Without a finish signal, the GameplayEffectsComponent's prefab-cleanup path doesn't fire after a sound completes; each played sound effect adds an entry to `m_spawnedEffects` that doesn't get removed. Over a session this accumulates.
 
 ---
 
@@ -117,7 +117,7 @@ The spawned `Sound_Effect.prefab` template (`Prefabs/Sound_Effect.prefab`) has:
 
 One prefab handles all 30 distinct sound effects because the trigger name is passed in at spawn time and resolved through Wwise/ATL externally.
 
-In MiniAudio's one-component-per-sound model, the cleanest port keeps the same shape:
+In MiniAudio's one-component-per-sound model, a natural port keeps the same shape:
 - Replace `EditorAudioTriggerComponent` + `AudioProxyComponent` with a single `MiniAudioPlaybackComponent`
 - At spawn time, call `SetSoundAsset(asset)` based on the `SoundEffect` enum, then `Play()`
 - Despawn when the finish notification fires
@@ -140,7 +140,7 @@ Unknown: whether the AutoComponent codegen supports `AZ::Data::Asset<T>` propert
 
 ## 5. Asset gap: MPS has never shipped game audio
 
-This is the largest scope finding and was not addressed in the brief.
+This finding was not addressed in the brief and has scope implications.
 
 ### What was checked
 
@@ -179,7 +179,7 @@ Options:
 3. Commission from the community / a contributor with audio production capacity.
 4. Ship the code migration with `nullptr`/empty `SoundAssetRef`s and accept silent gameplay until a follow-up asset PR lands.
 
-Option 4 is the cleanest sequencing — code migration becomes independently mergeable.
+Option 4 keeps the workstreams independent: the code migration becomes mergeable without waiting on assets.
 
 ---
 
